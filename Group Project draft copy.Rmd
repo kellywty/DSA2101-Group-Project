@@ -1,0 +1,272 @@
+---
+title: "Group Project"
+author: "Deforestation, Group 41: Koh Yi Jing, Tan Shi Hui Cheryl, Wang Tingyu Kelly, Yang Shu Ting"
+date: "2023-04-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = TRUE, message = FALSE, warning = FALSE, 
+                      fig.align = "center",  out.width = "80%")
+```
+
+## 1. Introduction 
+
+Forests are vital – they filter the air we breathe, slow down climate change and are home to a wide variety of flora and fauna (WWF, 2023). To address the pressing issue of deforestation, we will be exploring the past trends of deforestation and their associated uses, by analysing observations from the year 1990 to 2015. We want to understand if vegetable oil production contributes significantly to deforestation, and uncover the top reasons for deforestation in the top contributing country. The visualisations obtained from these questions will further allow us to decipher the industries impacting deforestation rates the most, and target future efforts specifically towards these to solve the issue of deforestation effectively.  
+
+## 2. Descriptive statistics
+
+```{r}
+library(tidytuesdayR)
+library(tidyverse)
+library(ggthemes)
+library(viridis)
+
+data = tt_load("2021-04-06")
+forest = data$forest
+forest_area = data$forest_area
+brazil_loss = data$brazil_loss
+soybean_use = data$soybean_use
+vegetable_oil = data$vegetable_oil
+```
+
+```{r Data cleaning}
+forest = forest %>% 
+  filter(entity != "World") %>%
+  drop_na(code)
+
+forest_area = forest_area %>%
+  filter(entity != "World") %>%
+  drop_na(code) %>%
+  mutate(forest_area = format(forest_area, scientific = FALSE)) %>%
+  mutate_at(vars(forest_area), as.numeric) %>%
+  mutate_at(vars(forest_area), round, digits = 2)
+
+brazil_loss = brazil_loss %>%
+  gather(`commercial_crops`:`small_scale_clearing`,key = "reason",value = "value")
+
+soybean_use = soybean_use %>%
+  filter(entity != "World") %>%
+  drop_na(code) %>%
+  gather(`human_food`:`processed`,key = "usage",value = "value") %>%
+  replace(is.na(.), 0)
+
+vegetable_oil = vegetable_oil %>%
+  filter(entity != "World") %>%
+  drop_na(code) %>%
+  replace(is.na(.), 0)
+```
+
+For the `brazil_loss` dataset, we tidied it by gathering the reasons for loss in one column. For the remaining datasets (`forest`,`soybean_use` & `vegetable_oil`), we filtered out “World” from the `entity` column and dropped NA values from the `code` column to remove the continents and regions. On top of that, we converted the `net_forest_conversion` in the `forest` dataset to numeric type and rounded it to 2 decimal places. In the `soybean_use` dataset, we gathered the last three columns on soybean usage and replaced NA with 0 in the `value` column. In the `vegetable_oil` dataset, we replaced NA values with 0 in the `production` column.
+
+```{r Descriptive statistics}
+summary(forest)
+n_distinct(forest$entity)
+summary(forest_area)
+n_distinct(forest_area$entity)
+summary(soybean_use)
+n_distinct(soybean_use$entity)
+summary(vegetable_oil)
+n_distinct(vegetable_oil$entity)
+summary(brazil_loss)
+```
+
+For the `forest` dataset, it contained data from the year 1990 to 2015 for 129 unique entities, and the median net forest conversion is 0 hectares, with its minimum value -3950790 hectares being much larger in magnitude than its maximum value 2360980. For the `forest_area` dataset, it contained data from the year 1990 to 2010 for 223 unique entities, and the maximum forest area is 20.09%, which means the entity with the largest percent of global forest area accounts for slightly less than a quarter of global forest area. For the `vegetable_oil` dataset, it contained data from the year 1961 to 2014 for 232 unique entities, and the maximum production is 29278200 tonnes. For the `brazil_loss` dataset, it contained data from the year 2001 to 2013, and the maximum loss of Brazilian forest is 2761000 hectares.
+
+## 3. Question 1
+
+### Introduction
+
+We want to investigate whether vegetable oil production has contributed to deforestation significantly using the `forest`,` forest_area` and `vegetable_oil` datasets. To answer this question, we want to focus on soybean oil production first, since soybean is one of the main types of vegetable oil. We are interested in this question because soy has been notorious for its links to deforestation due to the nature of its growth cycle. Soy can only produce very limited yield per cycle and it is unresponsive to fertilisers (Scorfield, 2021), thus leading to scarcity in soy production. Therefore more land is required to grow soy, potentially resulting in deforestation. Then we will compare the general trend of vegetable oil production with respect to deforestation.
+
+### Methodology
+
+For the first plot, we are investigating the relationship between the amount of soybean oil produced and the percentage of global forest area. We filtered out the top 5 soybean oil producing countries in 2014, since 2014 is the latest data available and these countries are more likely to have contributed to global deforestation significantly. We plotted the percentage of forest area of the top 5 countries against soybean oil production from 1990 to 2014, to see whether the two variables are positively or negatively correlated.
+
+For the first subplot in the second plot, we are plotting the time-series of vegetable oil production by types, from 1990 to 2014. The vegetable oil production is categorised into 3 types, which are palm, soybean, and rapeseed, since these are the top 3 types of crops for vegetable oil production. For the second subplot, we are plotting the amount of forest lost globally from 1990 to 2015. Putting these two subplots together allows us to compare the global trends of vegetable oil production, especially soybean oil production, and deforestation across years. 
+
+### Visualizations
+
+```{r Q1 Plot 1}
+soybean_oil = vegetable_oil %>%
+  filter(crop_oil == "Soybean")
+
+soybean_top5 = soybean_oil %>%
+  filter(year == 2014) %>%
+  arrange(desc(production)) %>%
+  head(5) %>%
+  pull(entity)
+
+forest_area_top5_soybean = forest_area %>%
+  left_join(soybean_oil, by = c("entity", "code", "year")) %>%
+  filter(entity %in% soybean_top5) %>%
+  drop_na(production) %>%   # 2015-2020 missing oil production
+  mutate(production = production/1000000) 
+
+ggplot(forest_area_top5_soybean, aes(x = production, y = forest_area)) +
+  geom_point() +
+  labs(x = "Vegetable oil production using soybean in million tonnes", y = "Percentage of global forest area",
+       title = "Relationship between soybean oil production and forest area by country") +
+  facet_wrap(~ entity, scales = "free") +
+  geom_smooth() + 
+  theme_minimal()
+```
+
+```{r Q1 Plot 2}
+vegetable_oil %>%
+  group_by(crop_oil) %>%
+  summarize(total = sum(production)) %>%
+  arrange(desc(total)) %>%
+  head(3)
+
+world_soybean_oil = soybean_oil %>%
+  filter(year >= 1990) %>%
+  group_by(year) %>%
+  summarize(total = sum(production))
+
+world_palm_oil = vegetable_oil %>%
+  filter(crop_oil == "Palm", year >= 1990) %>%
+  group_by(year) %>%
+  summarize(total = sum(production))
+
+world_rapeseed_oil = vegetable_oil %>%
+  filter(crop_oil == "Rapeseed", year >= 1990) %>%
+  group_by(year) %>%
+  summarize(total = sum(production))
+
+world_oil = world_soybean_oil %>%
+  left_join(world_palm_oil, by = "year") %>%
+  rename(Soybean = total.x, Palm = total.y) %>% 
+  left_join(world_rapeseed_oil, by = "year") %>%
+  rename(Rapeseed = total) %>%
+  gather(`Soybean`:`Rapeseed`, key = type, value = production)
+
+# prepare for texts on the plot
+text = world_oil %>%
+  filter(year == 2014)
+
+p1 = ggplot(data = world_oil) +
+  geom_line(aes(x = year, y = production/1000000, color = type)) +
+  geom_text(data = text, aes(x = 2015, y = production/1000000, label = type), 
+            nudge_x = 0.3, nudge_y = 2, size = 2.4) +
+  xlim(1990, 2016) +
+  labs(x = "Year", y = "Vegetable oil producted by type in million tonnes") +
+  scale_color_discrete(guide = "none") +
+  theme_minimal()
+
+world_deforestation = forest %>%
+  group_by(year) %>%
+  summarize(total = -sum(net_forest_conversion))
+
+p2 = ggplot(data = world_deforestation, aes(x = year, y = total/1000000)) +
+  geom_line() +
+  labs(x = "Year", y = "Amount of forest lost globally in million hectares") +
+  theme_minimal()
+
+library(gridExtra)
+library(grid)
+grid.arrange(p1, p2, nrow = 1,
+             top = textGrob("Does vegetable oil production follow the same trend as deforestation?"))
+```
+
+### Discussions
+
+The amount of soybean oil production and the percentage of global forest area are positively correlated for China, India, and the United States, while that of Argentina and Brazil are negatively correlated. The negative correlation could be the result of increasing soybean oil production, which means that more land has to be cleared for production, leading to less forest area. On the other hand, the positive correlation may mean that growing soybean oil production does not contribute significantly to deforestation in China, India, and the US. This could be due to the rates of natural forest expansion and afforestation being significantly higher than the deforestation rates.
+
+We further investigate the trends of soybean oil production and deforestation on a global level. From the plot, we can see that soybean oil production increased over the years, while the amount of forest lost globally decreased from 1990 to 2010, which aligns with the positive correlation we observed for China, India, and the US. However, the amount of forest lost globally increased from 2010 to 2015, which aligns with the negative correlation we observed for Argentina and Brazil. Since palm and rapeseed oil production have a similar trend as soybean oil production, it means that vegetable oil production in general may not have contributed significantly to deforestation as the amount of vegetable oil produced increased while forest loss decreased from 1990 to 2010. Hence, there might be other factors that contribute significantly to forest loss.
+
+
+## Question 2
+
+### Introduction
+
+We are interested in determining the top contributing countries for deforestation. This is important to know such that in future, more efficient and specific measures could be put into place to target these root causes and industries. This would be done through investigating the top 5 deforestation reasons of the country with the highest deforestation area and exploring the trends and consistency of these causes. To do this, we would be using the `forest` dataset to determine the country with the highest deforestation rates and consequently, using the `brazil_loss` dataset to zoom in on the reasons specifically in the country with the highest deforestation rates. 
+
+### Methodology
+
+Firstly, we will plot the area of forest lost for the top 5 countries with highest deforestation area against time, from 1990 to 2015 in a line graph. We derive the top 5 countries from the sum of net forest conversion over the years in the forest dataset. From the plot, we will identify the country with the highest net forest loss for further investigation of deforestation causes.
+
+Secondly, we will plot a stacked bar chart, to investigate the trends of the top few reasons that led to deforestation in Brazil. As data is not available for 1990-2000 and 2014-2015, we will work on data from 2000 to 2013. We filtered out the top 5 reasons, and grouped the remaining reasons into `Others`, as these factors did not contribute greatly to deforestation. By plotting the area of deforestation contributed by each reason against time, we can determine the most significant and consistent causes of deforestation over the years.
+
+### Visualizations
+
+```{r Q2 Plot 1}
+top5countries = forest %>%
+  select(entity, net_forest_conversion) %>%
+  group_by(entity) %>%
+  summarize(total = sum(net_forest_conversion)) %>%
+  arrange(total) %>%
+  ungroup() %>%
+  head(5) %>%
+  pull(entity)
+top5countries
+
+df = forest %>% rename(Country = entity) %>%
+  filter(Country %in% top5countries)
+
+ggplot(data = df,aes(year,-net_forest_conversion/1000000,color = Country)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Year",y = "Loss of forest (in million hectares)",title = "Amount of Forest Loss in Top 5 Contributing Countries",fill = "Country") +
+  scale_color_manual(values = c("#D55E00", "#000000",
+           "#56B4E9","#009E73" , "#CC79A7")) +
+  theme(plot.title = element_text(hjust = 0.6)) +
+  theme_minimal()
+```
+
+```{r Q2 Plot 2}
+top5reasons = brazil_loss %>%
+  select(reason, value) %>%
+  group_by(reason) %>%
+  summarize(reason = reason,total = sum(value), .groups = "drop") %>%
+  arrange(-total) %>%
+  unique() %>%
+  head(5) %>%
+  pull(reason)
+top5reasons
+
+df2 = brazil_loss %>%
+  mutate(reason = (ifelse(!(reason %in% top5reasons), "Others", reason))) %>%
+  mutate(reason= fct_reorder(reason, -value))
+levels(df2$reason)
+
+df_total <- df2 %>%
+  group_by(year) %>%
+  summarise(total_loss = sum(value))
+
+# Plot the data with a stacked bar chart and a separate line for the total
+options(scipen = 999)
+ggplot(data = df2,aes(year, value/1000000))+
+  geom_col(aes(fill = reason)) +
+  scale_fill_discrete(name = "Reason") +
+  geom_smooth(data = df_total, aes(year, total_loss/1000000), color = "black", se = FALSE) +
+  scale_fill_viridis(discrete = TRUE, direction = -1)+
+  labs(x = "Year",y = "Loss of forest (in millions)",title = "Reasons for Loss in Forest Area in Brazil from 2000 to 2013",fill = "Reason") +
+  theme(plot.title = element_text(hjust = 1.5)) +
+  theme_minimal()
+```
+
+### Discussions
+
+From the first plot, it is illustrated that the forest area lost in Brazil is consistently, and significantly higher than the other 4 countries in the plot. Despite the sharp decrease in forest loss in Brazil after 2000, its deforestation rates still stayed significantly above the rest. This is not surprising because the Amazon rainforest has suffered from severe deforestation and 60% of the Amazon forest is in Brazil (Genin, 2021). Hence, Brazil’s deforestation patterns and causes should be explored in greater depth. This is consequently done in our second plot. 
+
+From the second plot, from 2000 to 2004, there was a sharp increase in the overall forest loss, with its peak slightly exceeding 4 million in net forest loss in 2004. From 2005 onwards, there was a significant decrease, because of stricter government control and external economic reasons (Butler, 2021). Nonetheless, pasture is consistently the top reason for net forest loss in Brazil, accounting for more than half of the forest loss each year. This could be due to the fact that Brazil contributes to 15% of beef supply globally (Carvalho, 2020).
+
+
+## 5. Reference
+
+https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-04-06/readme.md
+
+WWF. (2023). The importance of forests. WWF. Retrieved April 14, 2023, from https://wwf.panda.org/discover/our_focus/forests_practice/importance_forests/ 
+
+Scorfield, H. (2021, October 19). Ethical debates: Is soy bad for the environment? ♻CW. Commercial Waste. Retrieved April 14, 2023, from https://commercialwaste.trade/ethical-debates-soy-bad-environment-commercial-waste/#:~:text=The%20leading%20cause%20for%20this,continuously%20growing%20demand%20for%20soy
+
+Genin, C., Calixto, B., Walls, G., Keneally, S., Frasson, C., & Vicente, I. (2021, September 3). How can Brazil protect the Amazon and advance climate action? World Resources Institute. Retrieved April 14, 2023, from https://www.wri.org/insights/strategies-amazon-rainforest-climate-action-brazil 
+
+Carvalho. (2020). Attractiveness of cattle farming in Brazil. Center for Advanced Studies on Applied Economics. Retrieved April 14, 2023, from https://www.cepea.esalq.usp.br/en/opinion/attractiveness-of-cattle-farming-in-brazil.aspx 
+
+Butler, R. A. (2021, November 22). Deforestation in the Amazon. Mongabay. Retrieved April 14, 2023, from https://rainforests.mongabay.com/amazon/amazon_destruction.html 
+
+
+
+
